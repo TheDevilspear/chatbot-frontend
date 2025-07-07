@@ -1,154 +1,656 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>📚 Jamba Chatbot</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>📚 DocLM Chatbot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Panel transitions */
+        .panel {
+            transition: width 0.3s ease-in-out, transform 0.3s ease-in-out;
+            will-change: width, transform;
+        }
+
+        /* Hide elements visually but keep for JS access if needed */
+        .hidden-visually {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            padding: 0;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen text-gray-800">
-  <div class="max-w-4xl mx-auto py-10 px-4">
-    <h1 class="text-3xl font-bold mb-6">🧠 Jamba Chatbot with Document Support</h1>
+<body class="bg-gray-100 min-h-screen text-gray-800 flex flex-col">
 
-    <!-- 🔹 Email -->
-    <div class="mb-4">
-      <label class="block font-semibold">Your Email:</label>
-      <input id="email" type="email" class="border p-2 w-full rounded" placeholder="you@example.com"/>
+    <header class="bg-white shadow-md p-4 flex justify-between items-center z-20 relative">
+        <h1 class="text-2xl font-bold text-blue-700">DocLM</h1>
+        <div class="relative">
+            <button id="user-email-icon" class="material-icons text-gray-600 hover:text-blue-700 text-3xl focus:outline-none" style="display: none;">account_circle</button>
+            <div id="user-email-tooltip" class="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-md shadow-lg py-2 text-sm text-gray-700" style="display: none;">
+                <p class="px-4 py-1" id="logged-in-email-display"></p>
+            </div>
+        </div>
+    </header>
+
+    <div id="main-content" class="flex flex-grow overflow-hidden relative" style="display: none;">
+
+        <aside id="left-panel" class="panel bg-gray-800 text-white flex flex-col items-center py-4 z-10" style="width: 60px;">
+            <button id="toggle-left-panel" class="material-icons text-3xl mb-6 hover:text-blue-400">menu</button>
+            <div id="left-panel-expanded-content" class="flex flex-col flex-grow items-start w-full px-2 overflow-y-auto" style="display: none;">
+                <button id="new-chat-button" class="flex items-center w-full px-4 py-2 text-left rounded-md hover:bg-gray-700 transition-colors duration-200 mb-4">
+                    <span class="material-icons mr-2">add_comment</span> New Chat
+                </button>
+                <h3 class="text-lg font-semibold mb-3 px-2">Past Conversations</h3>
+                <ul id="conversation-list" class="w-full space-y-2 flex-grow overflow-y-auto pr-2">
+                    <li class="px-4 py-2 text-sm text-gray-400">No conversations yet.</li>
+                </ul>
+            </div>
+            <button id="toggle-curl-preview" class="material-icons text-3xl mt-auto hover:text-blue-400">code</button>
+            <span id="curl-preview-text" class="text-xs mt-1" style="display: none;">CURL Preview</span>
+        </aside>
+
+        <main class="flex-grow flex flex-col bg-white shadow-lg rounded-lg mx-4 my-4 p-6 relative z-10">
+            <div id="chat-display" class="flex-grow overflow-y-auto mb-4 p-2 border rounded-md bg-gray-50 flex flex-col space-y-4">
+                <div class="text-center text-gray-500 py-10" id="chat-placeholder">Start a new chat or select a past conversation.</div>
+            </div>
+            <div class="flex items-center border-t pt-4">
+                <input type="text" id="prompt-input" placeholder="Ask something..." class="flex-grow border p-3 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg disabled:bg-gray-100" disabled>
+                <button id="send-message-button" class="bg-blue-600 text-white px-6 py-3 rounded-r-md hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <span class="material-icons">send</span>
+                </button>
+            </div>
+        </main>
+
+        <aside id="right-panel" class="panel bg-gray-800 text-white flex flex-col items-center py-4 z-10" style="width: 60px;">
+            <button id="toggle-right-panel" class="material-icons text-3xl mb-6 hover:text-blue-400">folder</button>
+            <div id="right-panel-expanded-content" class="flex flex-col flex-grow items-start w-full px-2 overflow-y-auto" style="display: none;">
+                <div class="flex items-center w-full mb-4 px-2">
+                    <h3 class="text-lg font-semibold mr-2">Upload Document</h3>
+                    <button id="toggle-upload-input" class="material-icons text-2xl hover:text-blue-400">add</button>
+                </div>
+                <div id="upload-section" class="w-full px-2 mb-6" style="display: none;">
+                    <input type="file" id="upload-file" class="block w-full text-sm text-gray-200 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600 mb-2"/>
+                    <input type="text" id="doc-name" class="border p-2 w-full rounded text-gray-800 text-sm mb-2" placeholder="Optional document name"/>
+                    <button id="upload-button" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors duration-200 w-full">Upload</button>
+                </div>
+                <h3 class="text-lg font-semibold mb-3 px-2">My Documents</h3>
+                <ul id="document-list" class="w-full space-y-2 flex-grow overflow-y-auto pr-2">
+                    <li class="px-4 py-2 text-sm text-gray-400">No documents uploaded.</li>
+                </ul>
+            </div>
+        </aside>
     </div>
 
-    <!-- 🔹 Upload Document -->
-    <div class="mb-4">
-      <label class="block font-semibold">Upload Document:</label>
-      <input id="upload-file" type="file" class="mb-2"/>
-      <input id="doc-name" type="text" class="border p-2 w-full rounded" placeholder="Optional document name"/>
-      <button onclick="uploadFile()" class="bg-blue-500 text-white px-4 py-2 rounded mt-2">Upload</button>
+    <div id="login-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-96 text-center">
+            <h2 class="text-2xl font-bold mb-6">Welcome to DocLM!</h2>
+            <p class="mb-4 text-gray-700">Please enter your email to get started.</p>
+            <input type="email" id="login-email-input" class="border p-3 w-full rounded-md mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="your.email@example.com"/>
+            <button id="login-submit-button" class="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors duration-200 w-full text-lg">Continue</button>
+        </div>
     </div>
 
-    <!-- 🔹 Document Controls -->
-    <div class="mb-4">
-      <button onclick="listDocs()" class="bg-gray-700 text-white px-4 py-2 rounded">List Docs</button>
-      <button onclick="deuploadDoc()" class="bg-red-500 text-white px-4 py-2 rounded ml-2">Deupload Selected</button>
+    <div id="curl-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-40" style="display: none;">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-2xl relative">
+            <button id="close-curl-modal" class="material-icons absolute top-3 right-3 text-gray-600 hover:text-red-500 text-3xl">close</button>
+            <h2 class="text-xl font-bold mb-4">📡 CURL Preview:</h2>
+            <pre id="curl-output" class="bg-gray-800 text-green-300 p-4 rounded-md text-sm overflow-x-auto whitespace-pre-wrap break-words font-mono"></pre>
+        </div>
     </div>
 
-    <div id="doc-list" class="mb-4 text-sm"></div>
+    <script>
+        const BASE_URL = "https://f814-34-90-46-232.ngrok-free.app"; // Your Ngrok URL
 
-    <!-- 🔹 Chat Section -->
-    <div class="mb-4">
-      <label class="block font-semibold">Ask a Question:</label>
-      <input id="prompt" type="text" class="border p-2 w-full rounded mb-2" placeholder="Ask something..."/>
-      <button onclick="askChat()" class="bg-green-600 text-white px-4 py-2 rounded">Ask</button>
-    </div>
+        // --- DOM Elements ---
+        const loginModal = document.getElementById('login-modal');
+        const loginEmailInput = document.getElementById('login-email-input');
+        const loginSubmitButton = document.getElementById('login-submit-button');
+        const mainContent = document.getElementById('main-content');
+        const userEmailIcon = document.getElementById('user-email-icon');
+        const userEmailTooltip = document.getElementById('user-email-tooltip');
+        const loggedInEmailDisplay = document.getElementById('logged-in-email-display');
 
-    <div class="bg-white p-4 rounded shadow mb-4">
-      <h3 class="font-semibold">💬 Chatbot Reply:</h3>
-      <pre id="chat-response" class="mt-2 text-gray-700 whitespace-pre-wrap"></pre>
-    </div>
+        const leftPanel = document.getElementById('left-panel');
+        const toggleLeftPanelButton = document.getElementById('toggle-left-panel');
+        const leftPanelExpandedContent = document.getElementById('left-panel-expanded-content');
+        const newChatButton = document.getElementById('new-chat-button');
+        const conversationList = document.getElementById('conversation-list');
+        const toggleCurlPreviewButton = document.getElementById('toggle-curl-preview');
+        const curlPreviewText = document.getElementById('curl-preview-text');
 
-    <!-- 🔹 History -->
-    <div class="mb-4">
-      <button onclick="getHistory()" class="bg-purple-600 text-white px-4 py-2 rounded">Get Chat History</button>
-      <pre id="chat-history" class="bg-white p-4 rounded shadow mt-2 whitespace-pre-wrap"></pre>
-    </div>
+        const chatDisplay = document.getElementById('chat-display');
+        const chatPlaceholder = document.getElementById('chat-placeholder');
+        const promptInput = document.getElementById('prompt-input');
+        const sendMessageButton = document.getElementById('send-message-button');
 
-    <!-- 🔹 CURL Preview -->
-    <div class="mt-6">
-      <h3 class="font-semibold">📡 CURL Preview:</h3>
-      <pre id="curl-output" class="bg-black text-green-300 p-4 rounded mt-2 text-sm overflow-x-auto"></pre>
-    </div>
-  </div>
+        const rightPanel = document.getElementById('right-panel');
+        const toggleRightPanelButton = document.getElementById('toggle-right-panel');
+        const rightPanelExpandedContent = document.getElementById('right-panel-expanded-content');
+        const toggleUploadInputButton = document.getElementById('toggle-upload-input');
+        const uploadSection = document.getElementById('upload-section');
+        const uploadFile = document.getElementById('upload-file');
+        const docNameInput = document.getElementById('doc-name');
+        const uploadButton = document.getElementById('upload-button');
+        const documentList = document.getElementById('document-list');
 
-  <script>
-    const BASE_URL = "https://f814-34-90-46-232.ngrok-free.app"; // 
+        const curlModal = document.getElementById('curl-modal');
+        const closeCurlModalButton = document.getElementById('close-curl-modal');
+        const curlOutput = document.getElementById('curl-output');
 
-    function getEmail() {
-      return document.getElementById("email").value.trim();
-    }
+        // --- Global State ---
+        let loggedInEmail = localStorage.getItem('userEmail') || '';
+        let currentConversationId = null;
+        let activeDocumentIds = []; // Docs selected for RAG context
+        let allConversations = [];
+        let allDocuments = []; // Documents uploaded within the current active conversation
+        let lastCurlCommand = '';
 
-    async function askChat() {
-      const email = getEmail();
-      const prompt = document.getElementById("prompt").value;
-      if (!email || !prompt) return alert("Email and prompt required!");
+        // --- Utility Functions ---
+        function setUIEnabled(enabled) {
+            promptInput.disabled = !enabled;
+            sendMessageButton.disabled = !enabled;
+            // Other interactive elements can be added here
+            if (enabled) {
+                mainContent.style.display = 'flex';
+                loginModal.style.display = 'none';
+                userEmailIcon.style.display = 'block';
+                loadUserConversations(); // Load conversations on successful login
+            } else {
+                mainContent.style.display = 'none';
+                userEmailIcon.style.display = 'none';
+            }
+        }
 
-      const res = await fetch(`${BASE_URL}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, prompt }),
-      });
+        function generateCurl(endpoint, method, headers, body) {
+            let curl = `curl -X ${method} ${BASE_URL}${endpoint}`;
+            for (const header in headers) {
+                curl += ` -H "${header}: ${headers[header]}"`;
+            }
+            if (body) {
+                curl += ` -d '${JSON.stringify(body)}'`;
+            }
+            lastCurlCommand = curl;
+            curlOutput.innerText = curl;
+        }
 
-      const data = await res.json();
-      document.getElementById("chat-response").innerText = data.response || data.error;
+        // --- Panel Toggling ---
+        function toggleLeftPanel() {
+            const isExpanded = leftPanel.style.width === '250px';
+            leftPanel.style.width = isExpanded ? '60px' : '250px';
+            leftPanelExpandedContent.style.display = isExpanded ? 'none' : 'flex';
+            curlPreviewText.style.display = isExpanded ? 'none' : 'block';
+        }
 
-      document.getElementById("curl-output").innerText =
-        `curl -X POST ${BASE_URL}/chat \\
-  -H "Content-Type: application/json" \\
-  -d '{"email": "${email}", "prompt": "${prompt}"}'`;
-    }
+        function toggleRightPanel() {
+            const isExpanded = rightPanel.style.width === '250px';
+            rightPanel.style.width = isExpanded ? '60px' : '250px';
+            rightPanelExpandedContent.style.display = isExpanded ? 'none' : 'flex';
+        }
 
-    async function uploadFile() {
-      const email = getEmail();
-      const file = document.getElementById("upload-file").files[0];
-      const name = document.getElementById("doc-name").value;
-      if (!email || !file) return alert("Email and file required!");
+        // --- Login Logic ---
+        function handleLogin() {
+            const email = loginEmailInput.value.trim();
+            if (email) {
+                loggedInEmail = email;
+                localStorage.setItem('userEmail', email);
+                loggedInEmailDisplay.innerText = email;
+                setUIEnabled(true);
+            } else {
+                alert("Please enter a valid email.");
+            }
+        }
 
-      const form = new FormData();
-      form.append("email", email);
-      form.append("file", file);
-      if (name) form.append("name", name);
+        function showLoginPrompt() {
+            setUIEnabled(false);
+            loginModal.style.display = 'flex';
+        }
 
-      const res = await fetch(`${BASE_URL}/upload`, { method: "POST", body: form });
-      const data = await res.json();
-      alert(data.message || data.error);
-      listDocs();
-    }
+        // --- Chat Functions ---
+        async function loadUserConversations() {
+            if (!loggedInEmail) return;
+            try {
+                const res = await fetch(`${BASE_URL}/history`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: loggedInEmail }),
+                });
+                const data = await res.json();
+                allConversations = data.history;
 
-    async function listDocs() {
-      const email = getEmail();
-      const res = await fetch(`${BASE_URL}/listdocs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
+                // Sort by created_at, latest on top
+                allConversations.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-      const data = await res.json();
-      const list = data.documents || [];
+                renderConversationList();
 
-      const html = list.map(doc => `
-        <div>
-          <input type="checkbox" name="doc-check" value="${doc.doc_id}" class="mr-2"/>
-          <span class="font-mono">${doc.name}</span> <code class="text-gray-500">${doc.doc_id}</code>
-        </div>`).join("");
+                // If no active conversation, start a new one implicitly or load the most recent
+                if (!currentConversationId && allConversations.length > 0) {
+                    selectConversation(allConversations[0]._id);
+                } else if (allConversations.length === 0) {
+                    startNewChat();
+                } else if (currentConversationId) {
+                     // Re-select current conversation to re-render it after refresh
+                     selectConversation(currentConversationId);
+                }
+            } catch (error) {
+                console.error("Error loading conversations:", error);
+                alert("Failed to load conversations. Please try again.");
+            }
+        }
 
-      document.getElementById("doc-list").innerHTML = html;
-    }
+        function renderConversationList() {
+            conversationList.innerHTML = '';
+            if (allConversations.length === 0) {
+                conversationList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">No conversations yet.</li>';
+                return;
+            }
 
-    async function deuploadDoc() {
-      const email = getEmail();
-      const checked = document.querySelector("input[name='doc-check']:checked");
-      if (!checked) return alert("Select a document to deupload");
+            allConversations.forEach(conv => {
+                const li = document.createElement('li');
+                li.className = `cursor-pointer px-4 py-2 rounded-md hover:bg-gray-700 transition-colors duration-200 ${conv._id === currentConversationId ? 'bg-blue-600' : ''}`;
+                li.dataset.conversationId = conv._id;
+                li.innerHTML = `
+                    <div class="flex items-center justify-between group">
+                        <span class="truncate pr-2">${conv.title || 'Untitled Conversation'}</span>
+                        <div class="relative">
+                            </div>
+                    </div>
+                `;
+                li.addEventListener('click', () => selectConversation(conv._id));
+                conversationList.appendChild(li);
+            });
+        }
 
-      const doc_id = checked.value;
-      const res = await fetch(`${BASE_URL}/deupload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, doc_id }),
-      });
+        async function selectConversation(convId) {
+            currentConversationId = convId;
+            // Update URL if you want deep linking (optional)
+            // history.pushState(null, '', `?conv=${convId}`);
 
-      const data = await res.json();
-      alert(data.success ? "Document deuploaded." : "Failed to deupload");
-      listDocs();
-    }
+            // Highlight selected conversation
+            document.querySelectorAll('#conversation-list li').forEach(li => {
+                if (li.dataset.conversationId === convId) {
+                    li.classList.add('bg-blue-600');
+                    li.classList.remove('bg-gray-700');
+                } else {
+                    li.classList.remove('bg-blue-600');
+                }
+            });
 
-    async function getHistory() {
-      const email = getEmail();
-      const res = await fetch(`${BASE_URL}/history`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
+            // Load messages for the selected conversation
+            await loadMessagesForConversation(convId);
+            // Load documents for the selected conversation
+            await loadDocumentsForConversation();
+        }
 
-      const data = await res.json();
-      document.getElementById("chat-history").innerText = JSON.stringify(data.history, null, 2);
-    }
-  </script>
+        async function loadMessagesForConversation(convId) {
+            if (!loggedInEmail || !convId) return;
+            try {
+                const res = await fetch(`${BASE_URL}/history`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: loggedInEmail, conversation_id: convId }), // Backend expects current conv id via get_chat
+                });
+                const data = await res.json();
+                renderMessages(data.history || []);
+            } catch (error) {
+                console.error("Error loading messages:", error);
+                alert("Failed to load chat history. Please try again.");
+                renderMessages([]); // Clear chat on error
+            }
+        }
+
+        function renderMessages(messages) {
+            chatDisplay.innerHTML = '';
+            if (messages.length === 0) {
+                chatPlaceholder.style.display = 'block';
+                return;
+            }
+            chatPlaceholder.style.display = 'none';
+
+            messages.forEach(msg => {
+                const msgDiv = document.createElement('div');
+                const timestamp = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }); // 24-hour format
+
+                if (msg.role === 'user') {
+                    msgDiv.className = 'flex flex-col items-end';
+                    msgDiv.innerHTML = `
+                        <div class="bg-blue-500 text-white p-3 rounded-lg max-w-lg shadow-md break-words">
+                            ${msg.content}
+                        </div>
+                        <span class="text-xs text-gray-500 mt-1 mr-2">${timestamp}</span>
+                    `;
+                } else if (msg.role === 'assistant') {
+                    msgDiv.className = 'flex flex-col items-start';
+                    msgDiv.innerHTML = `
+                        <div class="flex items-start">
+                            <span class="material-icons text-xl text-blue-600 mr-2">smart_toy</span>
+                            <div class="bg-gray-200 text-gray-800 p-3 rounded-lg max-w-lg shadow-md break-words">
+                                ${msg.content}
+                            </div>
+                        </div>
+                    `;
+                }
+                chatDisplay.appendChild(msgDiv);
+            });
+            chatDisplay.scrollTop = chatDisplay.scrollHeight; // Scroll to bottom
+        }
+
+        async function startNewChat() {
+            currentConversationId = null; // Backend will create a new one on first /chat call
+            activeDocumentIds = []; // Clear active docs for new chat
+            renderMessages([]); // Clear chat display
+            documentList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">No documents uploaded.</li>'; // Clear doc list
+            document.querySelectorAll('#conversation-list li').forEach(li => li.classList.remove('bg-blue-600')); // Deselect any highlighted convo
+            chatPlaceholder.style.display = 'block'; // Show placeholder again
+            console.log("New chat started (conversation ID will be created on first message).");
+        }
+
+        async function sendMessage() {
+            if (!loggedInEmail) {
+                showLoginPrompt();
+                return;
+            }
+            const prompt = promptInput.value.trim();
+            if (!prompt) return;
+
+            // Add user message to display immediately
+            renderMessages([{ role: 'user', content: prompt, timestamp: new Date() }]);
+            promptInput.value = ''; // Clear input
+
+            try {
+                const headers = { "Content-Type": "application/json" };
+                const body = { email: loggedInEmail, prompt: prompt };
+
+                const res = await fetch(`${BASE_URL}/chat`, {
+                    method: "POST",
+                    headers: headers,
+                    body: JSON.stringify(body),
+                });
+
+                const data = await res.json();
+                if (data.response) {
+                    renderMessages([{ role: 'assistant', content: data.response, timestamp: new Date() }]);
+                } else if (data.error) {
+                    alert(`Chat error: ${data.error}`);
+                    renderMessages([{ role: 'assistant', content: `Error: ${data.error}`, timestamp: new Date() }]);
+                }
+
+                generateCurl('/chat', 'POST', headers, body);
+                loadUserConversations(); // Refresh conversation list to get new/updated convo
+
+            } catch (error) {
+                console.error("Error sending message:", error);
+                alert("Failed to get chatbot reply. Please try again.");
+                renderMessages([{ role: 'assistant', content: `Network error: ${error.message}`, timestamp: new Date() }]);
+            }
+        }
+
+        // --- Document Functions ---
+        async function loadDocumentsForConversation() {
+            if (!loggedInEmail) return;
+            try {
+                const res = await fetch(`${BASE_URL}/listdocs`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: loggedInEmail }),
+                });
+                const data = await res.json();
+                allDocuments = data.documents || [];
+                renderDocumentList();
+            } catch (error) {
+                console.error("Error loading documents:", error);
+                documentList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">Failed to load documents.</li>';
+            }
+        }
+
+        function renderDocumentList() {
+            documentList.innerHTML = '';
+            if (allDocuments.length === 0) {
+                documentList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">No documents uploaded.</li>';
+                return;
+            }
+
+            allDocuments.forEach(doc => {
+                const li = document.createElement('li');
+                li.className = 'flex items-center justify-between group px-2 py-2 rounded-md hover:bg-gray-700 transition-colors duration-200 relative';
+                li.dataset.docId = doc.doc_id;
+
+                const isActive = activeDocumentIds.includes(doc.doc_id);
+                li.innerHTML = `
+                    <div class="flex items-center flex-grow">
+                        <button class="w-4 h-4 rounded-full border-2 ${isActive ? 'bg-blue-500 border-blue-500' : 'border-gray-400'} mr-2 flex-shrink-0" onclick="toggleDocumentSelection('${doc.doc_id}')"></button>
+                        <span class="truncate text-sm flex-grow cursor-pointer" onclick="event.stopPropagation();">${doc.name}</span>
+                    </div>
+                    <div class="relative ml-2">
+                        <button class="material-icons text-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200" onclick="event.stopPropagation(); toggleDocActionsMenu(this, '${doc.doc_id}')">more_vert</button>
+                        <div id="doc-actions-${doc.doc_id}" class="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-md shadow-lg py-2 text-sm text-gray-700 z-10 hidden">
+                            <button class="block w-full text-left px-4 py-1 hover:bg-gray-100" onclick="deleteDocument('${doc.doc_id}')">Delete Document</button>
+                        </div>
+                    </div>
+                `;
+                documentList.appendChild(li);
+            });
+        }
+
+        function toggleDocActionsMenu(button, docId) {
+            const menu = document.getElementById(`doc-actions-${docId}`);
+            // Hide all other open menus
+            document.querySelectorAll('[id^="doc-actions-"]').forEach(m => {
+                if (m !== menu) m.classList.add('hidden');
+            });
+            menu.classList.toggle('hidden');
+        }
+
+        async function toggleDocumentSelection(docId) {
+            if (!loggedInEmail) {
+                showLoginPrompt();
+                return;
+            }
+
+            const index = activeDocumentIds.indexOf(docId);
+            if (index > -1) {
+                activeDocumentIds.splice(index, 1); // Deselect
+            } else {
+                activeDocumentIds.push(docId); // Select
+            }
+
+            try {
+                const res = await fetch(`${BASE_URL}/use-doc`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: loggedInEmail, doc_ids: activeDocumentIds }),
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    alert("Failed to update active documents.");
+                    // Revert state if backend failed
+                    if (index > -1) activeDocumentIds.push(docId);
+                    else activeDocumentIds.splice(activeDocumentIds.indexOf(docId), 1);
+                }
+                renderDocumentList(); // Re-render to update circles
+            } catch (error) {
+                console.error("Error toggling document selection:", error);
+                alert("Failed to communicate with the server.");
+                // Revert state on network error
+                if (index > -1) activeDocumentIds.push(docId);
+                else activeDocumentIds.splice(activeDocumentIds.indexOf(docId), 1);
+            }
+        }
+
+        async function handleFileUpload() {
+            if (!loggedInEmail) {
+                showLoginPrompt();
+                return;
+            }
+            const file = uploadFile.files[0];
+            const docName = docNameInput.value.trim();
+
+            if (!file) {
+                alert("Please select a file to upload.");
+                return;
+            }
+
+            const form = new FormData();
+            form.append("email", loggedInEmail);
+            form.append("file", file);
+            if (docName) form.append("name", docName);
+
+            try {
+                const res = await fetch(`${BASE_URL}/upload`, { method: "POST", body: form });
+                const data = await res.json();
+                if (data.message) {
+                    alert(data.message);
+                    uploadFile.value = ''; // Clear file input
+                    docNameInput.value = ''; // Clear name input
+                    uploadSection.style.display = 'none'; // Hide upload section
+                    loadDocumentsForConversation(); // Refresh document list
+                } else if (data.error) {
+                    alert(`Upload error: ${data.error}`);
+                }
+            } catch (error) {
+                console.error("Error uploading file:", error);
+                alert("Failed to upload document. Please try again.");
+            }
+        }
+
+        async function deleteDocument(docId) {
+            if (!loggedInEmail) {
+                showLoginPrompt();
+                return;
+            }
+            if (!confirm("Are you sure you want to delete this document? This cannot be undone.")) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${BASE_URL}/deupload`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: loggedInEmail, doc_id: docId }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert("Document deleted.");
+                    // Remove from activeDocumentIds if it was there
+                    activeDocumentIds = activeDocumentIds.filter(id => id !== docId);
+                    // Also update the backend for active documents after deletion
+                    await fetch(`${BASE_URL}/use-doc`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email: loggedInEmail, doc_ids: activeDocumentIds }),
+                    });
+                    loadDocumentsForConversation(); // Refresh list
+                } else {
+                    alert("Failed to delete document.");
+                }
+            } catch (error) {
+                console.error("Error deleting document:", error);
+                alert("Failed to delete document. Please try again.");
+            }
+        }
+
+
+        // --- Event Listeners ---
+
+        // Login
+        loginSubmitButton.addEventListener('click', handleLogin);
+        loginEmailInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleLogin();
+        });
+
+        // Top Right Email Icon/Tooltip
+        userEmailIcon.addEventListener('click', () => {
+            userEmailTooltip.style.display = userEmailTooltip.style.display === 'none' ? 'block' : 'none';
+        });
+        document.addEventListener('click', (event) => {
+            if (!userEmailIcon.contains(event.target) && !userEmailTooltip.contains(event.target)) {
+                userEmailTooltip.style.display = 'none';
+            }
+             // Hide document action menus when clicking outside
+             document.querySelectorAll('[id^="doc-actions-"]').forEach(m => m.classList.add('hidden'));
+             // Hide conversation action menus (if implemented)
+             // document.querySelectorAll('[id^="conv-actions-"]').forEach(m => m.classList.add('hidden'));
+        });
+
+
+        // Panel Toggles
+        toggleLeftPanelButton.addEventListener('click', toggleLeftPanel);
+        toggleRightPanelButton.addEventListener('click', toggleRightPanel);
+
+        // Left Panel Actions
+        newChatButton.addEventListener('click', startNewChat);
+        toggleCurlPreviewButton.addEventListener('click', () => {
+            curlModal.style.display = 'flex';
+        });
+
+        // Chat
+        sendMessageButton.addEventListener('click', sendMessage);
+        promptInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Right Panel Actions
+        toggleUploadInputButton.addEventListener('click', () => {
+            uploadSection.style.display = uploadSection.style.display === 'none' ? 'block' : 'none';
+        });
+        uploadButton.addEventListener('click', handleFileUpload);
+
+
+        // CURL Modal
+        closeCurlModalButton.addEventListener('click', () => {
+            curlModal.style.display = 'none';
+        });
+
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (loggedInEmail) {
+                loggedInEmailDisplay.innerText = loggedInEmail;
+                setUIEnabled(true);
+            } else {
+                showLoginPrompt();
+            }
+        });
+
+        // Intercept interaction with disabled elements to show login prompt
+        document.addEventListener('click', (event) => {
+            if (!loggedInEmail && (event.target.closest('#main-content button:not(#toggle-left-panel):not(#toggle-right-panel):not(#close-curl-modal)') || event.target.closest('#main-content input:not(#login-email-input)'))) {
+                event.preventDefault();
+                event.stopPropagation();
+                showLoginPrompt();
+            }
+        });
+
+        document.addEventListener('keypress', (event) => {
+            if (!loggedInEmail && event.target.closest('#main-content input:not(#login-email-input)')) {
+                event.preventDefault();
+                event.stopPropagation();
+                showLoginPrompt();
+            }
+        });
+
+    </script>
 </body>
 </html>
