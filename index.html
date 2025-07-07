@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>📚 Jamba Chatbot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800">
+  <div class="max-w-4xl mx-auto py-10 px-4">
+    <h1 class="text-3xl font-bold mb-6">🧠 Jamba Chatbot with Document Support</h1>
+
+    <!-- 🔹 Email -->
+    <div class="mb-4">
+      <label class="block font-semibold">Your Email:</label>
+      <input id="email" type="email" class="border p-2 w-full rounded" placeholder="you@example.com"/>
+    </div>
+
+    <!-- 🔹 Upload Document -->
+    <div class="mb-4">
+      <label class="block font-semibold">Upload Document:</label>
+      <input id="upload-file" type="file" class="mb-2"/>
+      <input id="doc-name" type="text" class="border p-2 w-full rounded" placeholder="Optional document name"/>
+      <button onclick="uploadFile()" class="bg-blue-500 text-white px-4 py-2 rounded mt-2">Upload</button>
+    </div>
+
+    <!-- 🔹 Document Controls -->
+    <div class="mb-4">
+      <button onclick="listDocs()" class="bg-gray-700 text-white px-4 py-2 rounded">List Docs</button>
+      <button onclick="deuploadDoc()" class="bg-red-500 text-white px-4 py-2 rounded ml-2">Deupload Selected</button>
+    </div>
+
+    <div id="doc-list" class="mb-4 text-sm"></div>
+
+    <!-- 🔹 Chat Section -->
+    <div class="mb-4">
+      <label class="block font-semibold">Ask a Question:</label>
+      <input id="prompt" type="text" class="border p-2 w-full rounded mb-2" placeholder="Ask something..."/>
+      <button onclick="askChat()" class="bg-green-600 text-white px-4 py-2 rounded">Ask</button>
+    </div>
+
+    <div class="bg-white p-4 rounded shadow mb-4">
+      <h3 class="font-semibold">💬 Chatbot Reply:</h3>
+      <pre id="chat-response" class="mt-2 text-gray-700 whitespace-pre-wrap"></pre>
+    </div>
+
+    <!-- 🔹 History -->
+    <div class="mb-4">
+      <button onclick="getHistory()" class="bg-purple-600 text-white px-4 py-2 rounded">Get Chat History</button>
+      <pre id="chat-history" class="bg-white p-4 rounded shadow mt-2 whitespace-pre-wrap"></pre>
+    </div>
+
+    <!-- 🔹 CURL Preview -->
+    <div class="mt-6">
+      <h3 class="font-semibold">📡 CURL Preview:</h3>
+      <pre id="curl-output" class="bg-black text-green-300 p-4 rounded mt-2 text-sm overflow-x-auto"></pre>
+    </div>
+  </div>
+
+  <script>
+    const BASE_URL = "https://f814-34-90-46-232.ngrok-free.app"; // 
+
+    function getEmail() {
+      return document.getElementById("email").value.trim();
+    }
+
+    async function askChat() {
+      const email = getEmail();
+      const prompt = document.getElementById("prompt").value;
+      if (!email || !prompt) return alert("Email and prompt required!");
+
+      const res = await fetch(`${BASE_URL}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, prompt }),
+      });
+
+      const data = await res.json();
+      document.getElementById("chat-response").innerText = data.response || data.error;
+
+      document.getElementById("curl-output").innerText =
+        `curl -X POST ${BASE_URL}/chat \\
+  -H "Content-Type: application/json" \\
+  -d '{"email": "${email}", "prompt": "${prompt}"}'`;
+    }
+
+    async function uploadFile() {
+      const email = getEmail();
+      const file = document.getElementById("upload-file").files[0];
+      const name = document.getElementById("doc-name").value;
+      if (!email || !file) return alert("Email and file required!");
+
+      const form = new FormData();
+      form.append("email", email);
+      form.append("file", file);
+      if (name) form.append("name", name);
+
+      const res = await fetch(`${BASE_URL}/upload`, { method: "POST", body: form });
+      const data = await res.json();
+      alert(data.message || data.error);
+      listDocs();
+    }
+
+    async function listDocs() {
+      const email = getEmail();
+      const res = await fetch(`${BASE_URL}/listdocs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+      const list = data.documents || [];
+
+      const html = list.map(doc => `
+        <div>
+          <input type="checkbox" name="doc-check" value="${doc.doc_id}" class="mr-2"/>
+          <span class="font-mono">${doc.name}</span> <code class="text-gray-500">${doc.doc_id}</code>
+        </div>`).join("");
+
+      document.getElementById("doc-list").innerHTML = html;
+    }
+
+    async function deuploadDoc() {
+      const email = getEmail();
+      const checked = document.querySelector("input[name='doc-check']:checked");
+      if (!checked) return alert("Select a document to deupload");
+
+      const doc_id = checked.value;
+      const res = await fetch(`${BASE_URL}/deupload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, doc_id }),
+      });
+
+      const data = await res.json();
+      alert(data.success ? "Document deuploaded." : "Failed to deupload");
+      listDocs();
+    }
+
+    async function getHistory() {
+      const email = getEmail();
+      const res = await fetch(`${BASE_URL}/history`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+      document.getElementById("chat-history").innerText = JSON.stringify(data.history, null, 2);
+    }
+  </script>
+</body>
+</html>
