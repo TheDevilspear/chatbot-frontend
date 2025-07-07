@@ -122,535 +122,617 @@
     </div>
 
     <script>
-        const BASE_URL = "https://8ec7-34-90-46-232.ngrok-free.app"; // Your Ngrok URL
+    const BASE_URL = "https://8ec7-34-90-46-232.ngrok-free.app"; // Your Ngrok URL - REMEMBER TO UPDATE THIS IF IT CHANGES!
 
-        // --- DOM Elements ---
-        const loginModal = document.getElementById('login-modal');
-        const loginEmailInput = document.getElementById('login-email-input');
-        const loginSubmitButton = document.getElementById('login-submit-button');
-        const mainContent = document.getElementById('main-content');
-        const userEmailIcon = document.getElementById('user-email-icon');
-        const userEmailTooltip = document.getElementById('user-email-tooltip');
-        const loggedInEmailDisplay = document.getElementById('logged-in-email-display');
+    // --- DOM Elements ---
+    const loginModal = document.getElementById('login-modal');
+    const loginEmailInput = document.getElementById('login-email-input');
+    const loginSubmitButton = document.getElementById('login-submit-button');
+    const mainContent = document.getElementById('main-content');
+    const userEmailIcon = document.getElementById('user-email-icon');
+    const userEmailTooltip = document.getElementById('user-email-tooltip');
+    const loggedInEmailDisplay = document.getElementById('logged-in-email-display');
 
-        const leftPanel = document.getElementById('left-panel');
-        const toggleLeftPanelButton = document.getElementById('toggle-left-panel');
-        const leftPanelExpandedContent = document.getElementById('left-panel-expanded-content');
-        const newChatButton = document.getElementById('new-chat-button');
-        const conversationList = document.getElementById('conversation-list');
-        const toggleCurlPreviewButton = document.getElementById('toggle-curl-preview');
-        const curlPreviewText = document.getElementById('curl-preview-text');
+    const leftPanel = document.getElementById('left-panel');
+    const toggleLeftPanelButton = document.getElementById('toggle-left-panel');
+    const leftPanelExpandedContent = document.getElementById('left-panel-expanded-content');
+    const newChatButton = document.getElementById('new-chat-button');
+    const conversationList = document.getElementById('conversation-list');
+    const toggleCurlPreviewButton = document.getElementById('toggle-curl-preview');
+    const curlPreviewText = document.getElementById('curl-preview-text');
 
-        const chatDisplay = document.getElementById('chat-display');
-        const chatPlaceholder = document.getElementById('chat-placeholder');
-        const promptInput = document.getElementById('prompt-input');
-        const sendMessageButton = document.getElementById('send-message-button');
+    const chatDisplay = document.getElementById('chat-display');
+    const chatPlaceholder = document.getElementById('chat-placeholder');
+    const promptInput = document.getElementById('prompt-input');
+    const sendMessageButton = document.getElementById('send-message-button');
 
-        const rightPanel = document.getElementById('right-panel');
-        const toggleRightPanelButton = document.getElementById('toggle-right-panel');
-        const rightPanelExpandedContent = document.getElementById('right-panel-expanded-content');
-        const toggleUploadInputButton = document.getElementById('toggle-upload-input');
-        const uploadSection = document.getElementById('upload-section');
-        const uploadFile = document.getElementById('upload-file');
-        const docNameInput = document.getElementById('doc-name');
-        const uploadButton = document.getElementById('upload-button');
-        const documentList = document.getElementById('document-list');
+    const rightPanel = document.getElementById('right-panel');
+    const toggleRightPanelButton = document.getElementById('toggle-right-panel');
+    const rightPanelExpandedContent = document.getElementById('right-panel-expanded-content');
+    const toggleUploadInputButton = document.getElementById('toggle-upload-input');
+    const uploadSection = document.getElementById('upload-section');
+    const uploadFile = document.getElementById('upload-file');
+    const docNameInput = document.getElementById('doc-name');
+    const uploadButton = document.getElementById('upload-button');
+    const documentList = document.getElementById('document-list');
 
-        const curlModal = document.getElementById('curl-modal');
-        const closeCurlModalButton = document.getElementById('close-curl-modal');
-        const curlOutput = document.getElementById('curl-output');
+    const curlModal = document.getElementById('curl-modal');
+    const closeCurlModalButton = document.getElementById('close-curl-modal');
+    const curlOutput = document.getElementById('curl-output');
 
-        // --- Global State ---
-        let loggedInEmail = localStorage.getItem('userEmail') || '';
-        let currentConversationId = null;
-        let activeDocumentIds = []; // Docs selected for RAG context
-        let allConversations = [];
-        let allDocuments = []; // Documents uploaded within the current active conversation
-        let lastCurlCommand = '';
+    // --- Global State ---
+    let loggedInEmail = localStorage.getItem('userEmail') || '';
+    let currentConversationId = localStorage.getItem('currentConversationId') || null; // Persist current conversation ID
+    let activeDocumentIds = []; // Docs selected for RAG context
+    let allConversations = [];
+    let allDocuments = []; // Documents uploaded within the current active conversation
+    let lastCurlCommand = '';
 
-        // --- Utility Functions ---
-        function setUIEnabled(enabled) {
-            promptInput.disabled = !enabled;
-            sendMessageButton.disabled = !enabled;
-            // Other interactive elements can be added here
-            if (enabled) {
-                mainContent.style.display = 'flex';
-                loginModal.style.display = 'none';
-                userEmailIcon.style.display = 'block';
-                loadUserConversations(); // Load conversations on successful login
-            } else {
-                mainContent.style.display = 'none';
-                userEmailIcon.style.display = 'none';
+    // --- Utility Functions ---
+    function setUIEnabled(enabled) {
+        promptInput.disabled = !enabled;
+        sendMessageButton.disabled = !enabled;
+        if (enabled) {
+            mainContent.style.display = 'flex';
+            loginModal.style.display = 'none';
+            userEmailIcon.style.display = 'block';
+            // Only load conversations if not already loaded or switching context
+            if (!allConversations.length || !currentConversationId) {
+                loadUserConversations();
             }
+        } else {
+            mainContent.style.display = 'none';
+            userEmailIcon.style.display = 'none';
         }
+    }
 
-        function generateCurl(endpoint, method, headers, body) {
-            let curl = `curl -X ${method} ${BASE_URL}${endpoint}`;
-            for (const header in headers) {
-                curl += ` -H "${header}: ${headers[header]}"`;
+    function generateCurl(endpoint, method, headers, body) {
+        let curl = `curl -X ${method} ${BASE_URL}${endpoint}`;
+        for (const header in headers) {
+            curl += ` -H "${header}: ${headers[header]}"`;
+        }
+        if (body) {
+            curl += ` -d '${JSON.stringify(body)}'`;
+        }
+        lastCurlCommand = curl;
+        curlOutput.innerText = curl;
+    }
+
+    // --- Panel Toggling ---
+    function toggleLeftPanel() {
+        const isExpanded = leftPanel.style.width === '250px';
+        leftPanel.style.width = isExpanded ? '60px' : '250px';
+        leftPanelExpandedContent.style.display = isExpanded ? 'none' : 'flex';
+        curlPreviewText.style.display = isExpanded ? 'none' : 'block';
+    }
+
+    function toggleRightPanel() {
+        const isExpanded = rightPanel.style.width === '250px';
+        rightPanel.style.width = isExpanded ? '60px' : '250px';
+        rightPanelExpandedContent.style.display = isExpanded ? 'none' : 'flex';
+    }
+
+    // --- Login Logic ---
+    function handleLogin() {
+        const email = loginEmailInput.value.trim();
+        if (email) {
+            loggedInEmail = email;
+            localStorage.setItem('userEmail', email);
+            loggedInEmailDisplay.innerText = email;
+            setUIEnabled(true);
+            // Ensure conversation state is correctly initialized after login
+            if (!currentConversationId || currentConversationId === 'NEW_CONVERSATION_PENDING') {
+                startNewChat(false); // Do not force message display, just set up state
             }
-            if (body) {
-                curl += ` -d '${JSON.stringify(body)}'`;
-            }
-            lastCurlCommand = curl;
-            curlOutput.innerText = curl;
+        } else {
+            alert("Please enter a valid email.");
         }
+    }
 
-        // --- Panel Toggling ---
-        function toggleLeftPanel() {
-            const isExpanded = leftPanel.style.width === '250px';
-            leftPanel.style.width = isExpanded ? '60px' : '250px';
-            leftPanelExpandedContent.style.display = isExpanded ? 'none' : 'flex';
-            curlPreviewText.style.display = isExpanded ? 'none' : 'block';
-        }
+    function showLoginPrompt() {
+        setUIEnabled(false);
+        loginModal.style.display = 'flex';
+    }
 
-        function toggleRightPanel() {
-            const isExpanded = rightPanel.style.width === '250px';
-            rightPanel.style.width = isExpanded ? '60px' : '250px';
-            rightPanelExpandedContent.style.display = isExpanded ? 'none' : 'flex';
-        }
-
-        // --- Login Logic ---
-        function handleLogin() {
-            const email = loginEmailInput.value.trim();
-            if (email) {
-                loggedInEmail = email;
-                localStorage.setItem('userEmail', email);
-                loggedInEmailDisplay.innerText = email;
-                setUIEnabled(true);
-            } else {
-                alert("Please enter a valid email.");
-            }
-        }
-
-        function showLoginPrompt() {
-            setUIEnabled(false);
-            loginModal.style.display = 'flex';
-        }
-
-        // --- Chat Functions ---
-        async function loadUserConversations() {
-            if (!loggedInEmail) return;
-            try {
-                const res = await fetch(`${BASE_URL}/history`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email: loggedInEmail }),
-                });
-                const data = await res.json();
-                allConversations = data.history;
-
-                // Sort by created_at, latest on top
-                allConversations.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-                renderConversationList();
-
-                // If no active conversation, start a new one implicitly or load the most recent
-                if (!currentConversationId && allConversations.length > 0) {
-                    selectConversation(allConversations[0]._id);
-                } else if (allConversations.length === 0) {
-                    startNewChat();
-                } else if (currentConversationId) {
-                     // Re-select current conversation to re-render it after refresh
-                     selectConversation(currentConversationId);
-                }
-            } catch (error) {
-                console.error("Error loading conversations:", error);
-                alert("Failed to load conversations. Please try again.");
-            }
-        }
-
-        function renderConversationList() {
-            conversationList.innerHTML = '';
-            if (allConversations.length === 0) {
-                conversationList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">No conversations yet.</li>';
-                return;
-            }
-
-            allConversations.forEach(conv => {
-                const li = document.createElement('li');
-                li.className = `cursor-pointer px-4 py-2 rounded-md hover:bg-gray-700 transition-colors duration-200 ${conv._id === currentConversationId ? 'bg-blue-600' : ''}`;
-                li.dataset.conversationId = conv._id;
-                li.innerHTML = `
-                    <div class="flex items-center justify-between group">
-                        <span class="truncate pr-2">${conv.title || 'Untitled Conversation'}</span>
-                        <div class="relative">
-                            </div>
-                    </div>
-                `;
-                li.addEventListener('click', () => selectConversation(conv._id));
-                conversationList.appendChild(li);
+    // --- Chat Functions ---
+    async function loadUserConversations() {
+        if (!loggedInEmail) return;
+        try {
+            const res = await fetch(`${BASE_URL}/history`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: loggedInEmail }),
             });
-        }
+            const data = await res.json();
+            console.log("Fetched conversations:", data.history); // DEBUGGING LINE
+            allConversations = data.history || []; // Ensure it's an array
 
-        async function selectConversation(convId) {
-            currentConversationId = convId;
-            // Update URL if you want deep linking (optional)
-            // history.pushState(null, '', `?conv=${convId}`);
+            // Sort by created_at, latest on top
+            allConversations.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-            // Highlight selected conversation
-            document.querySelectorAll('#conversation-list li').forEach(li => {
-                if (li.dataset.conversationId === convId) {
-                    li.classList.add('bg-blue-600');
-                    li.classList.remove('bg-gray-700');
+            renderConversationList();
+
+            // If no active conversation, and there are conversations, load the most recent
+            if (!currentConversationId && allConversations.length > 0) {
+                console.log("No current conversation ID, loading most recent:", allConversations[0]._id); // DEBUG
+                selectConversation(allConversations[0]._id);
+            } else if (currentConversationId) {
+                // Check if the persisted currentConversationId still exists in the fetched list
+                const foundConv = allConversations.find(conv => conv._id === currentConversationId);
+                if (foundConv) {
+                    console.log("Persisted conversation ID found, re-selecting:", currentConversationId); // DEBUG
+                    selectConversation(currentConversationId);
                 } else {
-                    li.classList.remove('bg-blue-600');
+                    console.log("Persisted conversation ID not found, starting new chat.", currentConversationId); // DEBUG
+                    startNewChat(true); // Persisted ID invalid, start new but keep placeholder
                 }
+            } else if (allConversations.length === 0) {
+                console.log("No conversations found, starting new chat."); // DEBUG
+                startNewChat(true); // No conversations at all, start new
+            }
+
+        } catch (error) {
+            console.error("Error loading conversations:", error);
+            alert("Failed to load conversations. Please try again.");
+            startNewChat(true); // Ensure a clean slate if loading fails
+        }
+    }
+
+    function renderConversationList() {
+        conversationList.innerHTML = '';
+        if (allConversations.length === 0) {
+            conversationList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">No conversations yet.</li>';
+            return;
+        }
+
+        allConversations.forEach(conv => {
+            const li = document.createElement('li');
+            li.className = `cursor-pointer px-4 py-2 rounded-md hover:bg-gray-700 transition-colors duration-200 ${conv._id === currentConversationId ? 'bg-blue-600' : ''}`;
+            li.dataset.conversationId = conv._id;
+            li.innerHTML = `
+                <div class="flex items-center justify-between group">
+                    <span class="truncate pr-2">${conv.title || 'Untitled Conversation'}</span>
+                    <div class="relative">
+                        </div>
+                </div>
+            `;
+            li.addEventListener('click', () => selectConversation(conv._id));
+            conversationList.appendChild(li);
+        });
+    }
+
+    async function selectConversation(convId) {
+        currentConversationId = convId;
+        localStorage.setItem('currentConversationId', convId); // Persist
+        
+        // Highlight selected conversation
+        document.querySelectorAll('#conversation-list li').forEach(li => {
+            if (li.dataset.conversationId === convId) {
+                li.classList.add('bg-blue-600');
+                li.classList.remove('bg-gray-700');
+            } else {
+                li.classList.remove('bg-blue-600');
+            }
+        });
+
+        // Load messages for the selected conversation
+        await loadMessagesForConversation(convId);
+        // Load documents for the selected conversation (this will determine activeDocumentIds for rendering)
+        await loadDocumentsForConversation();
+    }
+
+    async function loadMessagesForConversation(convId) {
+        if (!loggedInEmail || !convId) {
+            renderMessages([]); // Show empty chat with placeholder
+            return;
+        }
+        try {
+            const res = await fetch(`${BASE_URL}/history`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: loggedInEmail, conversation_id: convId }),
             });
-
-            // Load messages for the selected conversation
-            await loadMessagesForConversation(convId);
-            // Load documents for the selected conversation
-            await loadDocumentsForConversation();
+            const data = await res.json();
+            // Filter messages by active documents (assuming messages have doc_ids)
+            // NOTE: This part might need adjustment if your backend `history` endpoint already filters by active docs,
+            // or if `doc_ids` is not consistently present on all messages.
+            const messages = data.history ? data.history.filter(msg => {
+                // If a message has no doc_ids, it's a general message, always show.
+                // If it has doc_ids, only show if ALL its doc_ids are in the current activeDocumentIds.
+                return !msg.doc_ids || msg.doc_ids.every(d => activeDocumentIds.includes(d));
+            }) : [];
+            renderMessages(messages || []);
+        } catch (error) {
+            console.error("Error loading messages:", error);
+            alert("Failed to load chat history. Please try again.");
+            renderMessages([]); // Clear chat on error, show placeholder
         }
+    }
 
-        async function loadMessagesForConversation(convId) {
-            if (!loggedInEmail || !convId) return;
-            try {
-                const res = await fetch(`${BASE_URL}/history`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email: loggedInEmail, conversation_id: convId }), // Backend expects current conv id via get_chat
-                });
-                const data = await res.json();
-                renderMessages(data.history || []);
-            } catch (error) {
-                console.error("Error loading messages:", error);
-                alert("Failed to load chat history. Please try again.");
-                renderMessages([]); // Clear chat on error
-            }
+    function renderMessages(messages) {
+        chatDisplay.innerHTML = ''; // Clear existing messages
+        if (messages.length === 0) {
+            chatPlaceholder.style.display = 'block'; // Show placeholder
+            return;
         }
+        chatPlaceholder.style.display = 'none'; // Hide placeholder if messages exist
 
-        function renderMessages(messages) {
-            chatDisplay.innerHTML = '';
-            if (messages.length === 0) {
-                chatPlaceholder.style.display = 'block';
-                return;
-            }
-            chatPlaceholder.style.display = 'none';
+        messages.forEach(msg => {
+            const msgDiv = document.createElement('div');
+            const timestamp = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }); // 24-hour format
 
-            messages.forEach(msg => {
-                const msgDiv = document.createElement('div');
-                const timestamp = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }); // 24-hour format
-
-                if (msg.role === 'user') {
-                    msgDiv.className = 'flex flex-col items-end';
-                    msgDiv.innerHTML = `
-                        <div class="bg-blue-500 text-white p-3 rounded-lg max-w-lg shadow-md break-words">
+            if (msg.role === 'user') {
+                msgDiv.className = 'flex flex-col items-end';
+                msgDiv.innerHTML = `
+                    <div class="bg-blue-500 text-white p-3 rounded-lg max-w-lg shadow-md break-words">
+                        ${msg.content}
+                    </div>
+                    <span class="text-xs text-gray-500 mt-1 mr-2">${timestamp}</span>
+                `;
+            } else if (msg.role === 'assistant') {
+                msgDiv.className = 'flex flex-col items-start';
+                msgDiv.innerHTML = `
+                    <div class="flex items-start">
+                        <span class="material-icons text-xl text-blue-600 mr-2">smart_toy</span>
+                        <div class="bg-gray-200 text-gray-800 p-3 rounded-lg max-w-lg shadow-md break-words">
                             ${msg.content}
                         </div>
-                        <span class="text-xs text-gray-500 mt-1 mr-2">${timestamp}</span>
-                    `;
-                } else if (msg.role === 'assistant') {
-                    msgDiv.className = 'flex flex-col items-start';
-                    msgDiv.innerHTML = `
-                        <div class="flex items-start">
-                            <span class="material-icons text-xl text-blue-600 mr-2">smart_toy</span>
-                            <div class="bg-gray-200 text-gray-800 p-3 rounded-lg max-w-lg shadow-md break-words">
-                                ${msg.content}
-                            </div>
-                        </div>
-                    `;
-                }
-                chatDisplay.appendChild(msgDiv);
-            });
-            chatDisplay.scrollTop = chatDisplay.scrollHeight; // Scroll to bottom
-        }
-
-        async function startNewChat() {
-            currentConversationId = null; // Backend will create a new one on first /chat call
-            activeDocumentIds = []; // Clear active docs for new chat
-            renderMessages([]); // Clear chat display
-            documentList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">No documents uploaded.</li>'; // Clear doc list
-            document.querySelectorAll('#conversation-list li').forEach(li => li.classList.remove('bg-blue-600')); // Deselect any highlighted convo
-            chatPlaceholder.style.display = 'block'; // Show placeholder again
-            console.log("New chat started (conversation ID will be created on first message).");
-        }
-
-        async function sendMessage() {
-            if (!loggedInEmail) {
-                showLoginPrompt();
-                return;
-            }
-            const prompt = promptInput.value.trim();
-            if (!prompt) return;
-
-            // Add user message to display immediately
-            renderMessages([{ role: 'user', content: prompt, timestamp: new Date() }]);
-            promptInput.value = ''; // Clear input
-
-            try {
-                const headers = { "Content-Type": "application/json" };
-                const body = { email: loggedInEmail, prompt: prompt };
-
-                const res = await fetch(`${BASE_URL}/chat`, {
-                    method: "POST",
-                    headers: headers,
-                    body: JSON.stringify(body),
-                });
-
-                const data = await res.json();
-                if (data.response) {
-                    renderMessages([{ role: 'assistant', content: data.response, timestamp: new Date() }]);
-                } else if (data.error) {
-                    alert(`Chat error: ${data.error}`);
-                    renderMessages([{ role: 'assistant', content: `Error: ${data.error}`, timestamp: new Date() }]);
-                }
-
-                generateCurl('/chat', 'POST', headers, body);
-                loadUserConversations(); // Refresh conversation list to get new/updated convo
-
-            } catch (error) {
-                console.error("Error sending message:", error);
-                alert("Failed to get chatbot reply. Please try again.");
-                renderMessages([{ role: 'assistant', content: `Network error: ${error.message}`, timestamp: new Date() }]);
-            }
-        }
-
-        // --- Document Functions ---
-        async function loadDocumentsForConversation() {
-            if (!loggedInEmail) return;
-            try {
-                const res = await fetch(`${BASE_URL}/listdocs`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email: loggedInEmail }),
-                });
-                const data = await res.json();
-                allDocuments = data.documents || [];
-                renderDocumentList();
-            } catch (error) {
-                console.error("Error loading documents:", error);
-                documentList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">Failed to load documents.</li>';
-            }
-        }
-
-        function renderDocumentList() {
-            documentList.innerHTML = '';
-            if (allDocuments.length === 0) {
-                documentList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">No documents uploaded.</li>';
-                return;
-            }
-
-            allDocuments.forEach(doc => {
-                const li = document.createElement('li');
-                li.className = 'flex items-center justify-between group px-2 py-2 rounded-md hover:bg-gray-700 transition-colors duration-200 relative';
-                li.dataset.docId = doc.doc_id;
-
-                const isActive = activeDocumentIds.includes(doc.doc_id);
-                li.innerHTML = `
-                    <div class="flex items-center flex-grow">
-                        <button class="w-4 h-4 rounded-full border-2 ${isActive ? 'bg-blue-500 border-blue-500' : 'border-gray-400'} mr-2 flex-shrink-0" onclick="toggleDocumentSelection('${doc.doc_id}')"></button>
-                        <span class="truncate text-sm flex-grow cursor-pointer" onclick="event.stopPropagation();">${doc.name}</span>
-                    </div>
-                    <div class="relative ml-2">
-                        <button class="material-icons text-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200" onclick="event.stopPropagation(); toggleDocActionsMenu(this, '${doc.doc_id}')">more_vert</button>
-                        <div id="doc-actions-${doc.doc_id}" class="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-md shadow-lg py-2 text-sm text-gray-700 z-10 hidden">
-                            <button class="block w-full text-left px-4 py-1 hover:bg-gray-100" onclick="deleteDocument('${doc.doc_id}')">Delete Document</button>
-                        </div>
                     </div>
                 `;
-                documentList.appendChild(li);
-            });
+            }
+            chatDisplay.appendChild(msgDiv);
+        });
+        chatDisplay.scrollTop = chatDisplay.scrollHeight; // Scroll to bottom
+    }
+
+    // Added `keepPlaceholder` parameter to control placeholder visibility
+    async function startNewChat(keepPlaceholder = false) {
+        currentConversationId = 'NEW_CONVERSATION_PENDING'; // Special state indicating a new conversation is pending
+        localStorage.removeItem('currentConversationId'); // Clear persisted ID
+        activeDocumentIds = []; // Clear active docs for new chat
+        renderMessages([]); // Clear chat display
+
+        // Reset document list and selection
+        allDocuments = []; // Clear local state of documents
+        documentList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">No documents uploaded.</li>';
+        
+        document.querySelectorAll('#conversation-list li').forEach(li => li.classList.remove('bg-blue-600')); // Deselect any highlighted convo
+        
+        if (keepPlaceholder) {
+            chatPlaceholder.style.display = 'block';
+        } else {
+            chatPlaceholder.style.display = 'none'; // If initiated from new chat button, might want to hide
         }
 
-        function toggleDocActionsMenu(button, docId) {
-            const menu = document.getElementById(`doc-actions-${docId}`);
-            // Hide all other open menus
-            document.querySelectorAll('[id^="doc-actions-"]').forEach(m => {
-                if (m !== menu) m.classList.add('hidden');
+        // Since a new conversation is pending, there are no documents associated yet.
+        // The system message will revert to the default one on the backend once a message is sent.
+        console.log("New chat initiated. Conversation ID will be created on first message.");
+    }
+
+
+    async function sendMessage() {
+        if (!loggedInEmail) {
+            showLoginPrompt();
+            return;
+        }
+        const prompt = promptInput.value.trim();
+        if (!prompt) return;
+
+        // Add user message to display immediately
+        renderMessages([{ role: 'user', content: prompt, timestamp: new Date() }]);
+        promptInput.value = ''; // Clear input
+
+        try {
+            const headers = { "Content-Type": "application/json" };
+            const body = { 
+                email: loggedInEmail, 
+                prompt: prompt,
+                conversation_id: currentConversationId === 'NEW_CONVERSATION_PENDING' ? undefined : currentConversationId, // Only send if not pending
+                doc_ids: activeDocumentIds // Send active documents with the chat message
+            };
+
+            const res = await fetch(`${BASE_URL}/chat`, {
+                method: "POST",
+                headers: headers,
+                body: JSON.stringify(body),
             });
-            menu.classList.toggle('hidden');
+
+            const data = await res.json();
+            if (data.response) {
+                renderMessages([{ role: 'assistant', content: data.response, timestamp: new Date() }]);
+                // If it was a new conversation, update currentConversationId
+                if (currentConversationId === 'NEW_CONVERSATION_PENDING') {
+                    // The backend currently creates a new conversation implicitly if conversation_id is undefined.
+                    // We need to fetch the conversation list again to get the new ID.
+                    await loadUserConversations(); 
+                    // The selectConversation in loadUserConversations will handle setting currentConversationId
+                } else {
+                    // For existing conversations, just refresh the list to update "updated_at"
+                    loadUserConversations();
+                }
+
+            } else if (data.error) {
+                alert(`Chat error: ${data.error}`);
+                renderMessages([{ role: 'assistant', content: `Error: ${data.error}`, timestamp: new Date() }]);
+            }
+
+            generateCurl('/chat', 'POST', headers, body);
+
+
+        } catch (error) {
+            console.error("Error sending message:", error);
+            alert("Failed to get chatbot reply. Please try again.");
+            renderMessages([{ role: 'assistant', content: `Network error: ${error.message}`, timestamp: new Date() }]);
+        }
+    }
+
+    // --- Document Functions ---
+    async function loadDocumentsForConversation() {
+        if (!loggedInEmail) return;
+        try {
+            const res = await fetch(`${BASE_URL}/listdocs`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: loggedInEmail }),
+            });
+            const data = await res.json();
+            allDocuments = data.documents || [];
+
+            // Reset activeDocumentIds based on what's active for the current conversation
+            // This assumes your `listdocs` endpoint or `history` endpoint gives us the active docs for the current conversation.
+            // If the backend doesn't explicitly store which docs were active per conversation,
+            // this `activeDocumentIds` will reset to an empty array unless explicitly re-selected.
+            // For now, let's assume `listdocs` gives us all docs, and `activeDocumentIds` is a global state.
+            // We'll set it to empty when starting a new chat.
+            activeDocumentIds = []; // Clear current active selection when loading docs for a conversation
+            
+            // If the conversation itself carries selected_doc_ids, we'd load them here.
+            // For now, assume `activeDocumentIds` is purely client-side global for the current session.
+            // If you want per-conversation active documents, your backend needs to send that info with `/history` or `get_chat`.
+
+            renderDocumentList();
+        } catch (error) {
+            console.error("Error loading documents:", error);
+            documentList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">Failed to load documents.</li>';
+        }
+    }
+
+    function renderDocumentList() {
+        documentList.innerHTML = '';
+        if (allDocuments.length === 0) {
+            documentList.innerHTML = '<li class="px-4 py-2 text-sm text-gray-400">No documents uploaded.</li>';
+            return;
         }
 
-        async function toggleDocumentSelection(docId) {
-            if (!loggedInEmail) {
-                showLoginPrompt();
-                return;
-            }
+        allDocuments.forEach(doc => {
+            const li = document.createElement('li');
+            li.className = 'flex items-center justify-between group px-2 py-2 rounded-md hover:bg-gray-700 transition-colors duration-200 relative';
+            li.dataset.docId = doc.doc_id;
 
-            const index = activeDocumentIds.indexOf(docId);
-            if (index > -1) {
-                activeDocumentIds.splice(index, 1); // Deselect
-            } else {
-                activeDocumentIds.push(docId); // Select
-            }
+            const isActive = activeDocumentIds.includes(doc.doc_id);
+            li.innerHTML = `
+                <div class="flex items-center flex-grow">
+                    <button class="w-4 h-4 rounded-full border-2 ${isActive ? 'bg-blue-500 border-blue-500' : 'border-gray-400'} mr-2 flex-shrink-0" onclick="toggleDocumentSelection('${doc.doc_id}')"></button>
+                    <span class="truncate text-sm flex-grow cursor-pointer" onclick="event.stopPropagation();">${doc.name}</span>
+                </div>
+                <div class="relative ml-2">
+                    <button class="material-icons text-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200" onclick="event.stopPropagation(); toggleDocActionsMenu(this, '${doc.doc_id}')">more_vert</button>
+                    <div id="doc-actions-${doc.doc_id}" class="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-md shadow-lg py-2 text-sm text-gray-700 z-10 hidden">
+                        <button class="block w-full text-left px-4 py-1 hover:bg-gray-100" onclick="deleteDocument('${doc.doc_id}')">Delete Document</button>
+                    </div>
+                </div>
+            `;
+            documentList.appendChild(li);
+        });
+    }
 
-            try {
-                const res = await fetch(`${BASE_URL}/use-doc`, {
+    function toggleDocActionsMenu(button, docId) {
+        const menu = document.getElementById(`doc-actions-${docId}`);
+        // Hide all other open menus
+        document.querySelectorAll('[id^="doc-actions-"]').forEach(m => {
+            if (m !== menu) m.classList.add('hidden');
+        });
+        menu.classList.toggle('hidden');
+    }
+
+    async function toggleDocumentSelection(docId) {
+        if (!loggedInEmail) {
+            showLoginPrompt();
+            return;
+        }
+
+        const index = activeDocumentIds.indexOf(docId);
+        if (index > -1) {
+            activeDocumentIds.splice(index, 1); // Deselect
+        } else {
+            activeDocumentIds.push(docId); // Select
+        }
+
+        try {
+            const res = await fetch(`${BASE_URL}/use-doc`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: loggedInEmail, doc_ids: activeDocumentIds }),
+            });
+            const data = await res.json();
+            if (!data.success) {
+                alert("Failed to update active documents.");
+                // Revert state if backend failed
+                if (index > -1) activeDocumentIds.push(docId);
+                else activeDocumentIds.splice(activeDocumentIds.indexOf(docId), 1);
+            }
+            renderDocumentList(); // Re-render to update circles
+            // If documents are toggled, we should reload messages to reflect changes in RAG context
+            // This is crucial if your backend's /history endpoint relies on active docs
+            if (currentConversationId && currentConversationId !== 'NEW_CONVERSATION_PENDING') {
+                 loadMessagesForConversation(currentConversationId);
+            }
+        } catch (error) {
+            console.error("Error toggling document selection:", error);
+            alert("Failed to communicate with the server.");
+            // Revert state on network error
+            if (index > -1) activeDocumentIds.push(docId);
+            else activeDocumentIds.splice(activeDocumentIds.indexOf(docId), 1);
+        }
+    }
+
+    async function handleFileUpload() {
+        if (!loggedInEmail) {
+            showLoginPrompt();
+            return;
+        }
+        const file = uploadFile.files[0];
+        const docName = docNameInput.value.trim();
+
+        if (!file) {
+            alert("Please select a file to upload.");
+            return;
+        }
+
+        const form = new FormData();
+        form.append("email", loggedInEmail);
+        form.append("file", file);
+        if (docName) form.append("name", docName);
+
+        try {
+            const res = await fetch(`${BASE_URL}/upload`, { method: "POST", body: form });
+            const data = await res.json();
+            if (data.message) {
+                alert(data.message);
+                uploadFile.value = ''; // Clear file input
+                docNameInput.value = ''; // Clear name input
+                uploadSection.style.display = 'none'; // Hide upload section
+                loadDocumentsForConversation(); // Refresh document list
+            } else if (data.error) {
+                alert(`Upload error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error("Error uploading file:", error);
+            alert("Failed to upload document. Please try again.");
+        }
+    }
+
+    async function deleteDocument(docId) {
+        if (!loggedInEmail) {
+            showLoginPrompt();
+            return;
+        }
+        if (!confirm("Are you sure you want to delete this document? This cannot be undone.")) {
+            return;
+        }
+
+        try {
+            const res = await fetch(`${BASE_URL}/deupload`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: loggedInEmail, doc_id: docId }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert("Document deleted.");
+                // Remove from activeDocumentIds if it was there
+                activeDocumentIds = activeDocumentIds.filter(id => id !== docId);
+                // Also update the backend for active documents after deletion
+                await fetch(`${BASE_URL}/use-doc`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email: loggedInEmail, doc_ids: activeDocumentIds }),
                 });
-                const data = await res.json();
-                if (!data.success) {
-                    alert("Failed to update active documents.");
-                    // Revert state if backend failed
-                    if (index > -1) activeDocumentIds.push(docId);
-                    else activeDocumentIds.splice(activeDocumentIds.indexOf(docId), 1);
+                loadDocumentsForConversation(); // Refresh list
+                // If a document used in the current conversation is deleted,
+                // we should re-load messages to reflect potential changes in context.
+                if (currentConversationId && currentConversationId !== 'NEW_CONVERSATION_PENDING') {
+                    loadMessagesForConversation(currentConversationId);
                 }
-                renderDocumentList(); // Re-render to update circles
-            } catch (error) {
-                console.error("Error toggling document selection:", error);
-                alert("Failed to communicate with the server.");
-                // Revert state on network error
-                if (index > -1) activeDocumentIds.push(docId);
-                else activeDocumentIds.splice(activeDocumentIds.indexOf(docId), 1);
-            }
-        }
-
-        async function handleFileUpload() {
-            if (!loggedInEmail) {
-                showLoginPrompt();
-                return;
-            }
-            const file = uploadFile.files[0];
-            const docName = docNameInput.value.trim();
-
-            if (!file) {
-                alert("Please select a file to upload.");
-                return;
-            }
-
-            const form = new FormData();
-            form.append("email", loggedInEmail);
-            form.append("file", file);
-            if (docName) form.append("name", docName);
-
-            try {
-                const res = await fetch(`${BASE_URL}/upload`, { method: "POST", body: form });
-                const data = await res.json();
-                if (data.message) {
-                    alert(data.message);
-                    uploadFile.value = ''; // Clear file input
-                    docNameInput.value = ''; // Clear name input
-                    uploadSection.style.display = 'none'; // Hide upload section
-                    loadDocumentsForConversation(); // Refresh document list
-                } else if (data.error) {
-                    alert(`Upload error: ${data.error}`);
-                }
-            } catch (error) {
-                console.error("Error uploading file:", error);
-                alert("Failed to upload document. Please try again.");
-            }
-        }
-
-        async function deleteDocument(docId) {
-            if (!loggedInEmail) {
-                showLoginPrompt();
-                return;
-            }
-            if (!confirm("Are you sure you want to delete this document? This cannot be undone.")) {
-                return;
-            }
-
-            try {
-                const res = await fetch(`${BASE_URL}/deupload`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email: loggedInEmail, doc_id: docId }),
-                });
-                const data = await res.json();
-                if (data.success) {
-                    alert("Document deleted.");
-                    // Remove from activeDocumentIds if it was there
-                    activeDocumentIds = activeDocumentIds.filter(id => id !== docId);
-                    // Also update the backend for active documents after deletion
-                    await fetch(`${BASE_URL}/use-doc`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ email: loggedInEmail, doc_ids: activeDocumentIds }),
-                    });
-                    loadDocumentsForConversation(); // Refresh list
-                } else {
-                    alert("Failed to delete document.");
-                }
-            } catch (error) {
-                console.error("Error deleting document:", error);
-                alert("Failed to delete document. Please try again.");
-            }
-        }
-
-
-        // --- Event Listeners ---
-
-        // Login
-        loginSubmitButton.addEventListener('click', handleLogin);
-        loginEmailInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleLogin();
-        });
-
-        // Top Right Email Icon/Tooltip
-        userEmailIcon.addEventListener('click', () => {
-            userEmailTooltip.style.display = userEmailTooltip.style.display === 'none' ? 'block' : 'none';
-        });
-        document.addEventListener('click', (event) => {
-            if (!userEmailIcon.contains(event.target) && !userEmailTooltip.contains(event.target)) {
-                userEmailTooltip.style.display = 'none';
-            }
-             // Hide document action menus when clicking outside
-             document.querySelectorAll('[id^="doc-actions-"]').forEach(m => m.classList.add('hidden'));
-             // Hide conversation action menus (if implemented)
-             // document.querySelectorAll('[id^="conv-actions-"]').forEach(m => m.classList.add('hidden'));
-        });
-
-
-        // Panel Toggles
-        toggleLeftPanelButton.addEventListener('click', toggleLeftPanel);
-        toggleRightPanelButton.addEventListener('click', toggleRightPanel);
-
-        // Left Panel Actions
-        newChatButton.addEventListener('click', startNewChat);
-        toggleCurlPreviewButton.addEventListener('click', () => {
-            curlModal.style.display = 'flex';
-        });
-
-        // Chat
-        sendMessageButton.addEventListener('click', sendMessage);
-        promptInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
-
-        // Right Panel Actions
-        toggleUploadInputButton.addEventListener('click', () => {
-            uploadSection.style.display = uploadSection.style.display === 'none' ? 'block' : 'none';
-        });
-        uploadButton.addEventListener('click', handleFileUpload);
-
-
-        // CURL Modal
-        closeCurlModalButton.addEventListener('click', () => {
-            curlModal.style.display = 'none';
-        });
-
-
-        // --- Initial Load ---
-        document.addEventListener('DOMContentLoaded', () => {
-            if (loggedInEmail) {
-                loggedInEmailDisplay.innerText = loggedInEmail;
-                setUIEnabled(true);
             } else {
-                showLoginPrompt();
+                alert("Failed to delete document.");
             }
-        });
+        } catch (error) {
+            console.error("Error deleting document:", error);
+            alert("Failed to delete document. Please try again.");
+        }
+    }
 
-        // Intercept interaction with disabled elements to show login prompt
-        document.addEventListener('click', (event) => {
-            if (!loggedInEmail && (event.target.closest('#main-content button:not(#toggle-left-panel):not(#toggle-right-panel):not(#close-curl-modal)') || event.target.closest('#main-content input:not(#login-email-input)'))) {
-                event.preventDefault();
-                event.stopPropagation();
-                showLoginPrompt();
-            }
-        });
 
-        document.addEventListener('keypress', (event) => {
-            if (!loggedInEmail && event.target.closest('#main-content input:not(#login-email-input)')) {
-                event.preventDefault();
-                event.stopPropagation();
-                showLoginPrompt();
-            }
-        });
+    // --- Event Listeners ---
 
-    </script>
+    // Login
+    loginSubmitButton.addEventListener('click', handleLogin);
+    loginEmailInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleLogin();
+    });
+
+    // Top Right Email Icon/Tooltip
+    userEmailIcon.addEventListener('click', () => {
+        userEmailTooltip.style.display = userEmailTooltip.style.display === 'none' ? 'block' : 'none';
+    });
+    document.addEventListener('click', (event) => {
+        if (!userEmailIcon.contains(event.target) && !userEmailTooltip.contains(event.target)) {
+            userEmailTooltip.style.display = 'none';
+        }
+         // Hide document action menus when clicking outside
+         document.querySelectorAll('[id^="doc-actions-"]').forEach(m => m.classList.add('hidden'));
+         // Hide conversation action menus (if implemented)
+         // document.querySelectorAll('[id^="conv-actions-"]').forEach(m => m.classList.add('hidden'));
+    });
+
+
+    // Panel Toggles
+    toggleLeftPanelButton.addEventListener('click', toggleLeftPanel);
+    toggleRightPanelButton.addEventListener('click', toggleRightPanel);
+
+    // Left Panel Actions
+    newChatButton.addEventListener('click', () => startNewChat(false)); // New chat button starts without placeholder initially
+    toggleCurlPreviewButton.addEventListener('click', () => {
+        curlModal.style.display = 'flex';
+    });
+
+    // Chat
+    sendMessageButton.addEventListener('click', sendMessage);
+    promptInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+
+    // Right Panel Actions
+    toggleUploadInputButton.addEventListener('click', () => {
+        uploadSection.style.display = uploadSection.style.display === 'none' ? 'block' : 'none';
+    });
+    uploadButton.addEventListener('click', handleFileUpload);
+
+
+    // CURL Modal
+    closeCurlModalButton.addEventListener('click', () => {
+        curlModal.style.display = 'none';
+    });
+
+
+    // --- Initial Load ---
+    document.addEventListener('DOMContentLoaded', () => {
+        if (loggedInEmail) {
+            loggedInEmailDisplay.innerText = loggedInEmail;
+            setUIEnabled(true);
+        } else {
+            showLoginPrompt();
+        }
+    });
+
+    // Intercept interaction with disabled elements to show login prompt
+    document.addEventListener('click', (event) => {
+        if (!loggedInEmail && (event.target.closest('#main-content button:not(#toggle-left-panel):not(#toggle-right-panel):not(#close-curl-modal)') || event.target.closest('#main-content input:not(#login-email-input)'))) {
+            event.preventDefault();
+            event.stopPropagation();
+            showLoginPrompt();
+        }
+    });
+
+    document.addEventListener('keypress', (event) => {
+        if (!loggedInEmail && event.target.closest('#main-content input:not(#login-email-input)')) {
+            event.preventDefault();
+            event.stopPropagation();
+            showLoginPrompt();
+        }
+    });
+
+</script>
 </body>
 </html>
